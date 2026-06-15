@@ -79,7 +79,7 @@ class RAGPipeline:
                 "rb"
             ) as f:
 
-                file_hash = hashlib.md5(
+                file_hash = hashlib.sha256(
                     f.read()
                 ).hexdigest()
 

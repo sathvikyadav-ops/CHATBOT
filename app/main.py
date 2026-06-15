@@ -11,30 +11,17 @@ from fastapi import (
     HTTPException
 )
 
-from fastapi.middleware.cors import (
-    CORSMiddleware
-)
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
 from pydantic import BaseModel
 
 from app.config import Config
-
-from app.services.rag_pipeline import (
-    RAGPipeline
-)
-
-from app.services.vector_store import (
-    VectorStore
-)
-
-from app.services.retriever import (
-    Retriever
-)
-
-from app.services.llm import (
-    GroqLLM
-)
+from app.services.rag_pipeline import RAGPipeline
+from app.services.vector_store import VectorStore
+from app.services.retriever import Retriever
+from app.services.llm import GroqLLM
+import hashlib
 
 
 # ==========================================================
@@ -50,7 +37,6 @@ app = FastAPI(
     title=Config.APP_NAME,
     version=Config.APP_VERSION
 )
-
 
 # ---------------------------------------------------
 # OPENAPI FIX
@@ -116,14 +102,16 @@ app.add_middleware(
 # SERVICES
 # ==========================================================
 pipeline = RAGPipeline()
-
 vector_store = VectorStore()
-
-retriever = Retriever(
-    vector_store
-)
-
+retriever = Retriever(vector_store)
 llm = GroqLLM()
+
+
+# ==========================================================
+# MODELS
+# ==========================================================
+class ChatRequest(BaseModel):
+    query: str
 
 
 # ==========================================================
@@ -131,7 +119,6 @@ llm = GroqLLM()
 # ==========================================================
 @app.get("/")
 def root():
-
     return {
         "status": "success",
         "message": "RAG API Running"
@@ -143,94 +130,80 @@ def root():
 # ==========================================================
 @app.get("/health")
 def health():
-
     return {
         "status": "healthy"
     }
 
 
 # ==========================================================
-# CHAT REQUEST
+# UPLOAD FILES
 # ==========================================================
-class ChatRequest(
-    BaseModel
-):
-    query: str
-
-
-# ==========================================================
-# UPLOAD
-# ==========================================================
-
 @app.post("/upload")
-async def upload_files(
-    files: list[UploadFile] = File(...)
-):
+async def upload_files(files: list[UploadFile] = File(...)):
 
     try:
-
-        # ==================================================
-        # STORAGE VARIABLES
-        # ==================================================
-        indexed_files = []
-        duplicate_files = []
-        chunks_to_store = []
-
         upload_dir = Path(Config.UPLOAD_DIR)
         upload_dir.mkdir(parents=True, exist_ok=True)
 
+        indexed_files = []
+        duplicate_files = []
+
         # ==================================================
-        # STEP 1: FILTER DUPLICATES FIRST
+        # STEP 1: CHECK DUPLICATES (BY HASH, NOT FILENAME)
         # ==================================================
         for file in files:
 
+            content = await file.read()
+            file_hash = hashlib.sha256(content).hexdigest()
+
+            file.file.seek(0)  # reset pointer after reading
+
             if (
                 Config.ENABLE_DUPLICATE_CHECK
-                and vector_store.file_already_indexed(file.filename)
+                and vector_store.file_already_indexed(file_hash)
             ):
                 duplicate_files.append(file.filename)
                 continue
 
-            indexed_files.append(file)
+            indexed_files.append((file, file_hash))
 
-        # ==================================================
-        # IF ALL FILES ARE DUPLICATES
-        # ==================================================
         if not indexed_files:
-
             return {
                 "status": "duplicate",
-                "message": "All files already exist in database.",
+                "message": "file already exist in database.",
                 "duplicates": duplicate_files
             }
 
         # ==================================================
-        # STEP 2: INGEST ONLY NEW FILES
+        # STEP 2: INGEST FILES
         # ==================================================
         chunks_to_store = pipeline.ingest_files(
-            files=indexed_files,
+            files=[f[0] for f in indexed_files],
             upload_dir=upload_dir,
             supported_ext=Config.SUPPORTED_EXTENSIONS
         )
 
-        # ==================================================
-        # VALIDATION
-        # ==================================================
         if not chunks_to_store:
-
             raise HTTPException(
                 status_code=400,
                 detail="No text extracted from uploaded files."
             )
 
         # ==================================================
-        # STEP 3: STORE IN VECTOR DB
+        # STEP 3: ATTACH HASH TO CHUNKS
+        # ==================================================
+        file_hash_map = {
+            f.filename: h for f, h in indexed_files
+        }
+
+        for chunk in chunks_to_store:
+            chunk["file_hash"] = file_hash_map.get(chunk["file_name"])
+
+        # ==================================================
+        # STEP 4: STORE IN VECTOR DB
         # ==================================================
         vector_store.add_documents(chunks_to_store)
 
-        # ==================================================
-        # RESPONSE
-        # ==================================================
         return {
             "status": "success",
             "files_uploaded": len(indexed_files),
@@ -243,27 +216,22 @@ async def upload_files(
 
     except Exception as e:
         traceback.print_exc()
-
         raise HTTPException(
             status_code=500,
             detail=str(e)
         )
 
 
-class ChatRequest(BaseModel):
-    query: str
-
-
+# ==========================================================
+# CHAT ENDPOINT
+# ==========================================================
 @app.post("/chat")
 async def chat(body: ChatRequest):
 
     try:
-
         query = body.query
 
-        # ==================================================
-        # RETRIEVE DOCS
-        # ==================================================
+        # Retrieve documents
         retrieved_docs = retriever.retrieve(query)
 
         if not retrieved_docs:
@@ -272,54 +240,40 @@ async def chat(body: ChatRequest):
                 "sources": []
             }
 
-        # ==================================================
-        # BUILD CONTEXT
-        # ==================================================
+        # Build context
         context_parts = []
 
         for doc in retrieved_docs:
-
             context_parts.append(
                 f"""
-Source: {doc['file_name']}
+Document: {doc['file_name']}
 Page: {doc['page']}
-Score: {round(doc['score'], 4)}
 
-Text:
 {doc['text']}
 """
             )
 
         context = "\n\n".join(context_parts)
 
-        # ==================================================
-        # LLM GENERATION
-        # ==================================================
+        # Generate answer
         answer = llm.generate(
             query=query,
             context=context
         )
 
-        # ==================================================
-        # BUILD SOURCES (WITH CHUNK TEXT + SCORE)
-        # ==================================================
-        sources = []
-
-        for doc in retrieved_docs:
-
-            sources.append({
+        # Build sources
+        sources = [
+            {
                 "file_name": doc["file_name"],
                 "page": doc["page"],
                 "score": round(doc["score"], 4),
-                "chunk_text": doc["text"][:500]  # safe limit
-            })
+                "chunk_text": doc["text"][:500]
+            }
+            for doc in retrieved_docs
+        ]
 
-        # sort best matches first
         sources = sorted(sources, key=lambda x: x["score"], reverse=True)
 
-        # ==================================================
-        # RESPONSE
-        # ==================================================
         return {
             "answer": answer,
             "sources": sources
