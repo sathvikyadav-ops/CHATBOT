@@ -12,7 +12,6 @@ class EmbeddingModel:
     """
     Handles embedding generation using Sentence Transformers.
     """
-
     def __init__(self):
         # Load embedding model
         self.model = SentenceTransformer(Config.EMBEDDING_MODEL)
