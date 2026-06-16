@@ -56,9 +56,9 @@ class Config:
     # ======================================================
     TOP_K = int(os.getenv("TOP_K", 5))
 
-    # FIXED: better default for your embedding model
+    
     SIMILARITY_THRESHOLD = float(
-        os.getenv("SIMILARITY_THRESHOLD", 0.15)
+        os.getenv("SIMILARITY_THRESHOLD", 0.25)
     )
 
     # ======================================================
