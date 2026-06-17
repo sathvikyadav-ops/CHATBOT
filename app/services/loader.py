@@ -15,7 +15,6 @@ class PDFLoader:
     def __init__(self):
 
         self.ocr = OCREngine()
-
         self.cleaner = TextCleaner()
 
     # ======================================================
@@ -26,31 +25,53 @@ class PDFLoader:
         page
     ) -> str:
 
-        text = page.get_text(
-            "text"
-        )
+        try:
 
-        ocr_text = (
-            self.ocr.run_ocr(
-                page
+            # ----------------------------------------------
+            # TRY NORMAL PDF TEXT EXTRACTION FIRST
+            # ----------------------------------------------
+            text = page.get_text(
+                "text"
+            ).strip()
+
+            # ----------------------------------------------
+            # IF TEXT EXISTS, SKIP OCR
+            # ----------------------------------------------
+            if text:
+
+                return (
+                    self.cleaner.clean_text(
+                        text
+                    )
+                )
+
+            # ----------------------------------------------
+            # OTHERWISE RUN OCR
+            # ----------------------------------------------
+            print(
+                f"[OCR] Page "
+                f"{page.number + 1}"
             )
-        )
 
-        combined = "\n".join(
-            filter(
-                None,
-                [
-                    text,
+            ocr_text = (
+                self.ocr.run_ocr(
+                    page
+                )
+            )
+
+            return (
+                self.cleaner.clean_text(
                     ocr_text
-                ]
+                )
             )
-        )
 
-        return (
-            self.cleaner.clean_text(
-                combined
+        except Exception as e:
+
+            print(
+                f"[PAGE EXTRACTION ERROR] {e}"
             )
-        )
+
+            return ""
 
     # ======================================================
     # EXTRACT PDF PAGE-WISE
@@ -68,7 +89,17 @@ class PDFLoader:
 
             pages = []
 
-            for page_number, page in enumerate(
+            total_pages = len(doc)
+
+            print(
+                f"Processing "
+                f"{total_pages} pages..."
+            )
+
+            for (
+                page_number,
+                page
+            ) in enumerate(
                 doc,
                 start=1
             ):
@@ -92,6 +123,11 @@ class PDFLoader:
                     )
 
             doc.close()
+
+            print(
+                f"Extracted "
+                f"{len(pages)} pages"
+            )
 
             return pages
 

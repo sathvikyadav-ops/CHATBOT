@@ -2,6 +2,8 @@
 # IMPORTS
 # =========================
 from sentence_transformers import SentenceTransformer
+from fastembed import SparseTextEmbedding
+
 from app.config import Config
 
 
@@ -10,17 +12,21 @@ from app.config import Config
 # =========================
 class EmbeddingModel:
     """
-    Handles embedding generation using Sentence Transformers.
+    Handles dense + sparse embeddings for hybrid search.
     """
+
     def __init__(self):
-        # Load embedding model
+        # Dense embedding model
         self.model = SentenceTransformer(Config.EMBEDDING_MODEL)
 
-        # Store embedding dimension (useful for vector DB like Qdrant)
+        # Sparse BM25 model (keyword search)
+        self.sparse_model = SparseTextEmbedding("Qdrant/bm25")
+
+        # Dimension for dense vectors
         self.dimension = self.model.get_sentence_embedding_dimension()
 
     # =========================
-    # SINGLE TEXT EMBEDDING
+    # DENSE EMBEDDING
     # =========================
     def encode(self, text: str) -> list[float]:
         embedding = self.model.encode(
@@ -28,11 +34,10 @@ class EmbeddingModel:
             normalize_embeddings=True,
             convert_to_numpy=True
         )
-
         return embedding.tolist()
 
     # =========================
-    # BATCH EMBEDDING
+    # BATCH DENSE EMBEDDING
     # =========================
     def encode_batch(self, texts: list[str]) -> list[list[float]]:
         embeddings = self.model.encode(
@@ -42,21 +47,16 @@ class EmbeddingModel:
             batch_size=32,
             show_progress_bar=False
         )
-
         return embeddings.tolist()
 
     # =========================
-    # COSINE SIMILARITY
+    # SPARSE EMBEDDING (BM25)
     # =========================
-    def similarity(self, text1: str, text2: str) -> float:
-        emb1 = self.model.encode(
-            text1,
-            normalize_embeddings=True
-        )
+    def encode_sparse(self, texts: list[str]):
+        """
+        Returns sparse vectors for Qdrant.
+        """
+        return list(self.sparse_model.embed(texts))
 
-        emb2 = self.model.encode(
-            text2,
-            normalize_embeddings=True
-        )
-
-        return float(emb1 @ emb2)
+    def encode_sparse_single(self, text: str):
+        return list(self.sparse_model.embed([text]))[0]

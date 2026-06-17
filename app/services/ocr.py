@@ -6,7 +6,8 @@ import io
 import pytesseract
 from PIL import (
     Image,
-    ImageOps
+    ImageOps,
+    ImageFilter
 )
 
 from app.config import Config
@@ -33,10 +34,19 @@ class OCREngine:
         image: Image.Image
     ) -> Image.Image:
 
-        image = image.convert("L")
+        # Convert to grayscale
+        image = image.convert(
+            "L"
+        )
 
+        # Improve contrast
         image = ImageOps.autocontrast(
             image
+        )
+
+        # Sharpen image
+        image = image.filter(
+            ImageFilter.SHARPEN
         )
 
         return image
@@ -57,28 +67,43 @@ class OCREngine:
 
             image = Image.open(
                 io.BytesIO(
-                    pix.tobytes("png")
+                    pix.tobytes(
+                        "png"
+                    )
                 )
-            ).convert("RGB")
+            )
 
-            image = self._preprocess(
-                image
+            image = (
+                self._preprocess(
+                    image
+                )
             )
 
             text = (
                 pytesseract.image_to_string(
                     image,
                     lang="eng",
-                    config="--oem 3 --psm 3"
+                    config=(
+                        "--oem 3 "
+                        "--psm 3"
+                    )
                 )
             )
 
             return text.strip()
 
-        except Exception as e:
+        except pytesseract.TesseractError as e:
 
             print(
                 f"[OCR ERROR] {e}"
+            )
+
+            return ""
+
+        except Exception as e:
+
+            print(
+                f"[OCR EXCEPTION] {e}"
             )
 
             return ""
@@ -95,26 +120,39 @@ class OCREngine:
 
             image = Image.open(
                 image_path
-            ).convert("RGB")
+            )
 
-            image = self._preprocess(
-                image
+            image = (
+                self._preprocess(
+                    image
+                )
             )
 
             text = (
                 pytesseract.image_to_string(
                     image,
                     lang="eng",
-                    config="--oem 3 --psm 3"
+                    config=(
+                        "--oem 3 "
+                        "--psm 3"
+                    )
                 )
             )
 
             return text.strip()
 
-        except Exception as e:
+        except pytesseract.TesseractError as e:
 
             print(
                 f"[IMAGE OCR ERROR] {e}"
+            )
+
+            return ""
+
+        except Exception as e:
+
+            print(
+                f"[IMAGE OCR EXCEPTION] {e}"
             )
 
             return ""

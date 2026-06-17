@@ -13,7 +13,9 @@ class Retriever:
         self,
         vector_store
     ):
-        self.vector_store = vector_store
+        self.vector_store = (
+            vector_store
+        )
 
     # ======================================================
     # RETRIEVE DOCUMENTS
@@ -23,83 +25,89 @@ class Retriever:
         query: str
     ):
 
-        print("\n========== RETRIEVAL ==========")
-        print(f"Query: {query}")
-
-        results = self.vector_store.search(
-            query=query,
-            top_k=Config.TOP_K
+        print(
+            f"\nSearch: {query}"
         )
 
-        documents = []
+        try:
 
-        for result in results:
+            # --------------------------------------------------
+            # Hybrid Search
+            # --------------------------------------------------
+            results = (
+                self.vector_store
+                .hybrid_search(
+                    query=query,
+                    top_k=Config.TOP_K
+                )
+            )
+
+            if not results:
+
+                print(
+                    "No documents retrieved."
+                )
+
+                return []
+
+            documents = []
+
+            for result in results:
+
+                payload = (
+                    result.payload or {}
+                )
+
+                documents.append(
+                    {
+                        "text":
+                        payload.get(
+                            "text",
+                            ""
+                        ),
+
+                        "score":
+                        round(
+                            result.score,
+                            4
+                        ),
+
+                        "file_name":
+                        payload.get(
+                            "file_name",
+                            "Unknown"
+                        ),
+
+                        "page":
+                        payload.get(
+                            "page_number",
+                            0
+                        ),
+
+                        "chunk_index":
+                        payload.get(
+                            "chunk_index",
+                            0
+                        ),
+
+                        "source":
+                        payload.get(
+                            "source",
+                            ""
+                        )
+                    }
+                )
 
             print(
-                f"Score: {result.score:.4f}"
+                f"Retrieved {len(documents)} documents."
             )
 
-            documents.append(
-                {
-                    "text":
-                    result.payload.get(
-                        "text",
-                        ""
-                    ),
+            return documents
 
-                    "score":
-                    result.score,
-
-                    "file_name":
-                    result.payload.get(
-                        "file_name",
-                        "Unknown"
-                    ),
-
-                    "page":
-                    result.payload.get(
-                        "page_number",
-                        0
-                    ),
-
-                    "chunk_index":
-                    result.payload.get(
-                        "chunk_index",
-                        0
-                    )
-                }
-            )
-
-        print(
-            f"Retrieved: {len(documents)}"
-        )
-
-        filtered = [
-            doc
-            for doc in documents
-            if doc["score"]
-            >= Config.SIMILARITY_THRESHOLD
-        ]
-
-        print(
-            f"After threshold: {len(filtered)}"
-        )
-
-        # ==================================================
-        # FALLBACK
-        # ==================================================
-        if not filtered and documents:
-
-            best_match = max(
-                documents,
-                key=lambda x: x["score"]
-            )
+        except Exception as e:
 
             print(
-                f"Fallback score: "
-                f"{best_match['score']:.4f}"
+                f"[RETRIEVAL ERROR] {e}"
             )
 
-            return [best_match]
-
-        return filtered
+            return []

@@ -23,11 +23,6 @@ class Config:
     QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "documents")
     QDRANT_TIMEOUT = int(os.getenv("QDRANT_TIMEOUT", 300))
 
-    # ======================================================
-    # MONGODB (CHAT MEMORY)
-    # ======================================================
-    MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
-    MONGO_DB = os.getenv("MONGO_DB", "rag_chatbot")
 
     # ======================================================
     # GROQ LLM
@@ -49,23 +44,19 @@ class Config:
         r"C:\Program Files\Tesseract-OCR\tesseract.exe"
     )
 
-    OCR_DPI = int(os.getenv("OCR_DPI", 300))
+    OCR_DPI = int(os.getenv("OCR_DPI", 200))
 
     # ======================================================
     # RETRIEVAL (VERY IMPORTANT)
     # ======================================================
     TOP_K = int(os.getenv("TOP_K", 5))
 
-    
-    SIMILARITY_THRESHOLD = float(
-        os.getenv("SIMILARITY_THRESHOLD", 0.25)
-    )
 
     # ======================================================
     # CHUNKING (CRITICAL FOR RAG QUALITY)
     # ======================================================
-    CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", 600))
-    CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", 120))
+    CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", 1000))
+    CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", 200))
 
     # ======================================================
     # STORAGE
@@ -98,8 +89,11 @@ class Config:
     )
 
     # ======================================================
-    # CHAT MEMORY LIMIT
+    # CHAT MEMORY 
     # ======================================================
+    MONGO_URI = os.getenv("MONGO_URI")
+    MONGO_DB = os.getenv("MONGO_DB")
+    CHAT_COLLECTION = os.getenv("CHAT_COLLECTION")
     CHAT_HISTORY_LIMIT = int(os.getenv("CHAT_HISTORY_LIMIT", 5))
 
     # ======================================================
