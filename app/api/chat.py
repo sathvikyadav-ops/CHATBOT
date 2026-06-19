@@ -1,4 +1,6 @@
 import uuid
+import re
+
 from fastapi import (
     APIRouter,
     HTTPException,
@@ -46,7 +48,6 @@ async def chat(
             or str(uuid.uuid4())
         )
 
-        # Send session back only in header
         response.headers[
             "X-Session-Id"
         ] = session_id
@@ -64,18 +65,60 @@ async def chat(
         for item in history:
 
             history_text += (
-                f"User: {item.get('query','')}\n"
-                f"Assistant: {item.get('answer','')}\n\n"
+                f"User: {item.get('query', '')}\n"
+                f"Assistant: {item.get('answer', '')}\n\n"
             )
+
+        # ==========================================
+        # SUMMARY DETECTION
+        # ==========================================
+        is_summary = False
+        file_name = None
+        retrieval_query = query
+
+        match = re.search(
+            r"(?:summary of|summarize)\s+(.+?\.pdf)",
+            query,
+            re.IGNORECASE
+        )
+
+        if match:
+
+            is_summary = True
+            file_name = match.group(1).strip()
+
+            # Better retrieval query
+            retrieval_query = (
+                "Summarize this document"
+            )
+
+        print(
+            "\n========== SUMMARY DETECTION =========="
+        )
+
+        print(f"Original Query: {query}")
+        print(f"Is Summary: {is_summary}")
+        print(f"File Name: {file_name}")
+        print(
+            f"Retrieval Query: "
+            f"{retrieval_query}"
+        )
 
         # ==========================================
         # RETRIEVAL
         # ==========================================
         retrieved_docs = (
-            retriever.retrieve(query)
+            retriever.retrieve(
+                query=retrieval_query,
+                file_name=file_name,
+                is_summary=is_summary
+            )
             or []
         )
 
+        # ==========================================
+        # NO DOCUMENTS FOUND
+        # ==========================================
         if not retrieved_docs:
 
             answer = (
@@ -99,7 +142,7 @@ async def chat(
         # ==========================================
         context_parts = []
 
-        for doc in retrieved_docs[:5]:
+        for doc in retrieved_docs:
 
             context_parts.append(
                 f"""
